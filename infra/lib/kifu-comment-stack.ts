@@ -42,11 +42,6 @@ export class KifuCommentStack extends cdk.Stack {
     const api = new apigateway.RestApi(this, "KifuApi", {
       restApiName: "kifu-comment-api",
       deployOptions: { stageName: "prod" },
-      defaultCorsPreflightOptions: {
-        allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: ["OPTIONS", "POST"],
-        allowHeaders: ["Content-Type"],
-      },
     });
 
     const analyze = api.root.addResource("analyze");
@@ -63,6 +58,15 @@ export class KifuCommentStack extends cdk.Stack {
       defaultBehavior: {
         origin: origins.S3BucketOrigin.withOriginAccessControl(siteBucket),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+      },
+      additionalBehaviors: {
+        "/api/*": {
+          origin: new origins.RestApiOrigin(api),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+        },
       },
       defaultRootObject: "index.html",
     });

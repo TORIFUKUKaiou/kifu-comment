@@ -62,7 +62,7 @@ body { font-family: "Hiragino Sans", "Yu Gothic", sans-serif; background: #1a1a2
 </div>
 
 <script>
-const API_URL = localStorage.getItem('kifu_api_url') || '';
+const API_URL = '/api/prod/analyze';
 
 let kifText = null;
 let evalChart = null;
@@ -101,13 +101,6 @@ fileInput.addEventListener('change', async (e) => {
 
 analyzeBtn.addEventListener('click', async () => {
   if (!kifText) return;
-  if (!API_URL) {
-    const url = prompt('API Endpoint URLを入力してください (例: https://xxx.execute-api.region.amazonaws.com/prod/analyze)');
-    if (!url) return;
-    localStorage.setItem('kifu_api_url', url);
-    location.reload();
-    return;
-  }
 
   analyzeBtn.disabled = true;
   status.textContent = '解析中...';
