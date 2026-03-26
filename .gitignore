@@ -3,3 +3,11 @@ __pycache__/
 *.pyc
 uv.lock
 *.kif
+node_modules/
+cdk.out/
+dist/
+lambda/**/
+!lambda/*.py
+!lambda/prompt.txt
+lambda/.lock
+lambda/typing_extensions.py

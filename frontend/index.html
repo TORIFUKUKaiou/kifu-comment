@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>棋譜解析 - 将棋の先生</title>
+<script src="https://cdn.jsdelivr.net/npm/kifu-for-js@5/bundle/kifu-for-js.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "Hiragino Sans", "Yu Gothic", sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; }
+.header { padding: 16px 24px; background: #16213e; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 16px; }
+.header h1 { font-size: 1.2rem; }
+.upload-btn { padding: 8px 16px; background: #e94560; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+.upload-btn:hover { background: #c73e54; }
+.upload-btn:disabled { background: #666; cursor: not-allowed; }
+#file-input { display: none; }
+.status { font-size: 0.85rem; color: #aaa; }
+.main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px; max-width: 1400px; margin: 0 auto; }
+.board-panel { background: #16213e; border-radius: 12px; padding: 16px; min-height: 500px; }
+.right-panel { display: flex; flex-direction: column; gap: 16px; }
+.chart-panel { background: #16213e; border-radius: 12px; padding: 16px; height: 280px; }
+.analysis-panel { background: #16213e; border-radius: 12px; padding: 16px; flex: 1; overflow-y: auto; }
+.analysis-panel h2 { font-size: 1rem; margin-bottom: 12px; color: #e94560; }
+.swing-point { background: #0f3460; border-radius: 8px; padding: 12px; margin-bottom: 8px; border-left: 3px solid #e94560; }
+.swing-point .tag { display: inline-block; background: #e94560; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-bottom: 4px; }
+.swing-point .move-info { font-size: 0.85rem; color: #aaa; margin-bottom: 4px; }
+.swing-point .comment { font-size: 0.9rem; line-height: 1.6; }
+.summary-section { margin-top: 16px; }
+.summary-section h3 { font-size: 0.9rem; color: #e94560; margin-bottom: 8px; }
+.summary-section p { font-size: 0.85rem; line-height: 1.7; color: #ccc; margin-bottom: 8px; }
+.empty-state { display: flex; align-items: center; justify-content: center; height: 100%; color: #666; font-size: 1.1rem; }
+@media (max-width: 960px) { .main { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🔥 棋譜解析 — 将棋の先生</h1>
+  <label class="upload-btn" id="upload-label">
+    .kifファイルを選択
+    <input type="file" id="file-input" accept=".kif">
+  </label>
+  <button class="upload-btn" id="analyze-btn" disabled>解析する</button>
+  <span class="status" id="status"></span>
+</div>
+
+<div class="main">
+  <div class="board-panel" id="board-panel">
+    <div class="empty-state" id="board-empty">棋譜ファイルを読み込んでください</div>
+    <div id="kifu-player" style="display:none;"></div>
+  </div>
+  <div class="right-panel">
+    <div class="chart-panel">
+      <canvas id="eval-chart"></canvas>
+    </div>
+    <div class="analysis-panel" id="analysis-panel">
+      <div class="empty-state" id="analysis-empty">解析結果がここに表示されます</div>
+      <div id="analysis-content" style="display:none;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_URL = localStorage.getItem('kifu_api_url') || '';
+
+let kifText = null;
+let evalChart = null;
+
+const fileInput = document.getElementById('file-input');
+const analyzeBtn = document.getElementById('analyze-btn');
+const status = document.getElementById('status');
+
+fileInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const buf = await file.arrayBuffer();
+  const decoder = new TextDecoder('shift_jis');
+  kifText = decoder.decode(buf);
+
+  document.getElementById('upload-label').textContent = file.name;
+  analyzeBtn.disabled = false;
+  status.textContent = '読み込み完了';
+
+  // Show board
+  document.getElementById('board-empty').style.display = 'none';
+  const player = document.getElementById('kifu-player');
+  player.style.display = 'block';
+  player.innerHTML = '';
+
+  const pre = document.createElement('script');
+  pre.className = 'kifu-for-js';
+  pre.textContent = kifText;
+  player.appendChild(pre);
+
+  if (window.KifuForJS) {
+    KifuForJS.load(player);
+  }
+});
+
+analyzeBtn.addEventListener('click', async () => {
+  if (!kifText) return;
+  if (!API_URL) {
+    const url = prompt('API Endpoint URLを入力してください (例: https://xxx.execute-api.region.amazonaws.com/prod/analyze)');
+    if (!url) return;
+    localStorage.setItem('kifu_api_url', url);
+    location.reload();
+    return;
+  }
+
+  analyzeBtn.disabled = true;
+  status.textContent = '解析中...';
+
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kif: kifText }),
+    });
+    const data = await res.json();
+
+    if (data.error) {
+      status.textContent = 'エラー: ' + data.error;
+      analyzeBtn.disabled = false;
+      return;
+    }
+
+    renderEvalChart(data.parsed);
+    renderAnalysis(data.analysis);
+    status.textContent = '解析完了';
+  } catch (e) {
+    status.textContent = 'エラー: ' + e.message;
+  }
+  analyzeBtn.disabled = false;
+});
+
+function renderEvalChart(parsed) {
+  const ctx = document.getElementById('eval-chart').getContext('2d');
+  const moves = parsed.moves || [];
+
+  const labels = moves.map(m => m.move);
+  const values = moves.map(m => {
+    const ev = m.eval_after;
+    if (ev.type === 'cp') return ev.value;
+    if (ev.type === 'mate') return ev.value > 0 ? 3000 : -3000;
+    return 0;
+  });
+
+  if (evalChart) evalChart.destroy();
+
+  evalChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: '評価値',
+        data: values,
+        borderColor: '#e94560',
+        backgroundColor: 'rgba(233,69,96,0.1)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+      },
+      scales: {
+        x: {
+          title: { display: true, text: '手数', color: '#aaa' },
+          ticks: { color: '#aaa' },
+          grid: { color: '#333' },
+        },
+        y: {
+          title: { display: true, text: '評価値', color: '#aaa' },
+          ticks: { color: '#aaa' },
+          grid: { color: '#333' },
+          suggestedMin: -3000,
+          suggestedMax: 3000,
+        }
+      }
+    }
+  });
+}
+
+function renderAnalysis(analysis) {
+  document.getElementById('analysis-empty').style.display = 'none';
+  const content = document.getElementById('analysis-content');
+  content.style.display = 'block';
+
+  let html = '<h2>局面のポイント</h2>';
+
+  if (analysis.swing_points) {
+    for (const sp of analysis.swing_points) {
+      html += `<div class="swing-point">
+        <span class="tag">${sp.tag || ''}</span>
+        <div class="move-info">${sp.move}手目 ${sp.player === 'sente' ? '☗' : '☖'} ${sp.move_text}</div>
+        <div class="comment">${sp.short_comment || ''}</div>
+      </div>`;
+    }
+  }
+
+  if (analysis.summary) {
+    html += '<div class="summary-section"><h3>対局の流れ</h3>';
+    if (analysis.summary.opening_to_middle) html += `<p><strong>序盤〜中盤:</strong> ${analysis.summary.opening_to_middle}</p>`;
+    if (analysis.summary.middle_to_endgame) html += `<p><strong>中盤〜終盤:</strong> ${analysis.summary.middle_to_endgame}</p>`;
+    if (analysis.summary.final_phase) html += `<p><strong>最終盤:</strong> ${analysis.summary.final_phase}</p>`;
+    html += '</div>';
+  }
+
+  content.innerHTML = html;
+}
+</script>
+</body>
+</html>
