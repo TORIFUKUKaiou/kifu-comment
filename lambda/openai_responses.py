@@ -7,10 +7,25 @@ API_URL = os.environ.get("OPENAI_API_URL", "https://api.openai.com/v1/responses"
 
 
 def analyze_kifu(parsed: dict, system_prompt: str, *, model: str, api_key: str) -> dict:
+    input_json = json.dumps(parsed, ensure_ascii=False)
     payload = {
         "model": model,
         "instructions": system_prompt,
-        "input": json.dumps(parsed, ensure_ascii=False),
+        "input": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": (
+                            "Analyze the following shogi game data and return JSON only.\n"
+                            "Input JSON:\n"
+                            f"{input_json}"
+                        ),
+                    }
+                ],
+            }
+        ],
         "temperature": 0.3,
         "max_output_tokens": 1200,
         "text": {

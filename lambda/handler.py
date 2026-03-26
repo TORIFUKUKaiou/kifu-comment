@@ -1,6 +1,7 @@
 import json
 import os
 import tempfile
+import traceback
 from openai_responses import analyze_kifu
 from parse_kif import parse_kif
 
@@ -56,6 +57,8 @@ def handler(event, context):
         }
 
     except Exception as e:
+        print(f"handler error: {e}")
+        traceback.print_exc()
         return {
             "statusCode": 500,
             "headers": headers,
