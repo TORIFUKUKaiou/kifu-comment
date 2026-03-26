@@ -1030,6 +1030,7 @@ let cosmoCleanupTimer = null;
 let boardHost = document.getElementById('kifu-player');
 let boardStore = null;
 let boardStorePromise = null;
+let boardStoreDisposer = null;
 let renderedKifuText = null;
 
 const fileInput = document.getElementById('file-input');
@@ -1125,6 +1126,7 @@ async function renderBoard() {
     );
     renderedKifuText = kifText;
     boardStore = await boardStorePromise;
+    attachBoardSelectionObserver();
   } catch (err) {
     boardStore = null;
     boardStorePromise = null;
@@ -1469,7 +1471,25 @@ function setStatus(message, type = 'info') {
   status.classList.add(`status-${type}`);
 }
 
+function attachBoardSelectionObserver() {
+  if (!boardStore || !window.KifuForJS?.mobx?.autorun) return;
+
+  boardStoreDisposer?.();
+  boardStoreDisposer = KifuForJS.mobx.autorun(() => {
+    const boardMove = Number(boardStore.player?.tesuu) || 0;
+    if (boardMove === selectedMove) return;
+
+    selectedMove = boardMove;
+    applyChartSelection();
+    applyAnalysisSelection();
+    renderSelectedMoveCard();
+    updateMeta(currentParsed);
+  });
+}
+
 function resetBoardHost() {
+  boardStoreDisposer?.();
+  boardStoreDisposer = null;
   const freshHost = document.createElement('div');
   freshHost.id = 'kifu-player';
   freshHost.className = 'board-host';
