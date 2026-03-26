@@ -282,8 +282,8 @@ body.cosmo-active .layout {
   grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
   grid-template-areas:
     "control control"
-    "board analysis"
-    "chart analysis";
+    "chart analysis"
+    "board analysis";
 }
 
 .panel {
@@ -979,6 +979,16 @@ body.cosmo-active .layout {
     </div>
   </section>
 
+  <section class="panel chart-panel reveal">
+    <div class="panel-heading">
+      <h2 class="panel-title">Eval Wave</h2>
+      <p class="panel-note">点をクリックすると、その手数の局面へ移動します。</p>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="eval-chart"></canvas>
+    </div>
+  </section>
+
   <section class="panel board-panel reveal" id="board-panel">
     <div class="panel-heading">
       <h2 class="panel-title">Board Jump</h2>
@@ -991,16 +1001,6 @@ body.cosmo-active .layout {
     <div class="selected-move-card">
       <div id="selected-move-empty" class="empty-inline">解析後に局面を選ぶと、実戦とAI推奨の比較をここに表示します。</div>
       <div id="selected-move-content" class="is-hidden"></div>
-    </div>
-  </section>
-
-  <section class="panel chart-panel reveal">
-    <div class="panel-heading">
-      <h2 class="panel-title">Eval Wave</h2>
-      <p class="panel-note">点をクリックすると、その手数の局面へ移動します。</p>
-    </div>
-    <div class="chart-wrap">
-      <canvas id="eval-chart"></canvas>
     </div>
   </section>
 
