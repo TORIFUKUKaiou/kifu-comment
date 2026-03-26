@@ -1027,13 +1027,16 @@ let selectedMove = 0;
 let cosmoStarInterval = null;
 let cosmoStopTimer = null;
 let cosmoCleanupTimer = null;
+let boardHost = document.getElementById('kifu-player');
+let boardStore = null;
+let boardStorePromise = null;
+let renderedKifuText = null;
 
 const fileInput = document.getElementById('file-input');
 const analyzeBtn = document.getElementById('analyze-btn');
 const status = document.getElementById('status');
 const uploadLabelText = document.getElementById('upload-label-text');
 const boardEmpty = document.getElementById('board-empty');
-const boardHost = document.getElementById('kifu-player');
 const analysisEmpty = document.getElementById('analysis-empty');
 const analysisContent = document.getElementById('analysis-content');
 const selectedMoveEmpty = document.getElementById('selected-move-empty');
@@ -1062,7 +1065,7 @@ fileInput.addEventListener('change', async (e) => {
   selectedMove = 0;
   resetAnalysisUI();
   updateMeta(null);
-  renderBoard(0);
+  await renderBoard();
 });
 
 analyzeBtn.addEventListener('click', async () => {
@@ -1106,23 +1109,25 @@ analyzeBtn.addEventListener('click', async () => {
   analyzeBtn.disabled = false;
 });
 
-function renderBoard(ply) {
+async function renderBoard() {
   if (!kifText || !window.KifuForJS) return;
 
   boardEmpty.classList.add('is-hidden');
-  boardHost.classList.remove('is-hidden');
-  boardHost.innerHTML = '';
+  resetBoardHost();
 
   try {
-    KifuForJS.load(
+    boardStorePromise = KifuForJS.load(
       {
         kifu: kifText,
-        ply,
         maxWidth: null,
       },
       'kifu-player',
     );
+    renderedKifuText = kifText;
+    boardStore = await boardStorePromise;
   } catch (err) {
+    boardStore = null;
+    boardStorePromise = null;
     setStatus(`棋譜表示エラー: ${err.message}`, 'error');
     console.error(err);
   }
@@ -1255,7 +1260,7 @@ function renderAnalysis(parsed, analysis) {
 function jumpToMove(move, { revealBoard = true } = {}) {
   const numericMove = Number(move) || 0;
   selectedMove = numericMove;
-  renderBoard(selectedMove);
+  syncBoardToSelectedMove();
   applyChartSelection();
   applyAnalysisSelection();
   renderSelectedMoveCard();
@@ -1263,6 +1268,27 @@ function jumpToMove(move, { revealBoard = true } = {}) {
 
   if (revealBoard && window.innerWidth < 980) {
     document.getElementById('board-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+async function syncBoardToSelectedMove() {
+  if (!kifText) return;
+
+  try {
+    if (renderedKifuText !== kifText) {
+      await renderBoard();
+    } else if (!boardStore && boardStorePromise) {
+      boardStore = await boardStorePromise;
+    } else if (!boardStore) {
+      await renderBoard();
+    }
+    if (!boardStore) {
+      throw new Error('盤面ストアを取得できませんでした');
+    }
+    boardStore.player.goto(selectedMove);
+  } catch (err) {
+    setStatus(`局面ジャンプエラー: ${err.message}`, 'error');
+    console.error(err);
   }
 }
 
@@ -1441,6 +1467,17 @@ function setStatus(message, type = 'info') {
   status.textContent = message;
   status.classList.remove('status-info', 'status-success', 'status-error');
   status.classList.add(`status-${type}`);
+}
+
+function resetBoardHost() {
+  const freshHost = document.createElement('div');
+  freshHost.id = 'kifu-player';
+  freshHost.className = 'board-host';
+  boardHost.replaceWith(freshHost);
+  boardHost = freshHost;
+  boardHost.classList.remove('is-hidden');
+  boardStore = null;
+  boardStorePromise = null;
 }
 
 function startCosmo() {
