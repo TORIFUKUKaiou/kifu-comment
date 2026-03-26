@@ -1,7 +1,12 @@
 import sys
 import os
 import json
-from openai import OpenAI
+
+LAMBDA_DIR = os.path.join(os.path.dirname(__file__), "lambda")
+if LAMBDA_DIR not in sys.path:
+    sys.path.insert(0, LAMBDA_DIR)
+
+from openai_responses import analyze_kifu
 
 SYSTEM_PROMPT = open(os.path.join(os.path.dirname(__file__), "lambda", "prompt.txt")).read()
 
@@ -16,22 +21,12 @@ def main():
     from parse_kif import parse_kif
 
     parsed = parse_kif(kif_path)
-    structured_input = json.dumps(parsed, ensure_ascii=False)
-
-    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-
-    response = client.responses.create(
-        model="gpt-5.4-nano",
-        instructions=SYSTEM_PROMPT,
-        input=structured_input,
-        temperature=0.3,
+    result = analyze_kifu(
+        parsed,
+        SYSTEM_PROMPT,
+        model=os.environ.get("MODEL", "gpt-5.4-nano"),
+        api_key=os.environ["OPENAI_API_KEY"],
     )
-
-    raw = response.output_text.strip()
-    if raw.startswith("```"):
-        raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-
-    result = json.loads(raw)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 

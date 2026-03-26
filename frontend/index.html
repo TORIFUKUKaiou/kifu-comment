@@ -38,7 +38,7 @@ body { font-family: "Hiragino Sans", "Yu Gothic", sans-serif; background: #1a1a2
 <div class="header">
   <h1>🔥 棋譜解析 — 将棋の先生</h1>
   <label class="upload-btn" id="upload-label">
-    .kifファイルを選択
+    <span id="upload-label-text">.kifファイルを選択</span>
     <input type="file" id="file-input" accept=".kif">
   </label>
   <button class="upload-btn" id="analyze-btn" disabled>解析する</button>
@@ -62,7 +62,7 @@ body { font-family: "Hiragino Sans", "Yu Gothic", sans-serif; background: #1a1a2
 </div>
 
 <script>
-const API_URL = '/api/prod/analyze';
+const API_URL = '/api/analyze';
 
 let kifText = null;
 let evalChart = null;
@@ -70,6 +70,7 @@ let evalChart = null;
 const fileInput = document.getElementById('file-input');
 const analyzeBtn = document.getElementById('analyze-btn');
 const status = document.getElementById('status');
+const uploadLabelText = document.getElementById('upload-label-text');
 
 fileInput.addEventListener('change', async (e) => {
   const file = e.target.files[0];
@@ -79,7 +80,7 @@ fileInput.addEventListener('change', async (e) => {
   const decoder = new TextDecoder('shift_jis');
   kifText = decoder.decode(buf);
 
-  document.getElementById('upload-label').textContent = file.name;
+  uploadLabelText.textContent = file.name;
   analyzeBtn.disabled = false;
   status.textContent = '読み込み完了';
 
@@ -120,7 +121,7 @@ analyzeBtn.addEventListener('click', async () => {
     }
 
     renderEvalChart(data.parsed);
-    renderAnalysis(data.analysis);
+    renderAnalysis(data.parsed, data.analysis);
     status.textContent = '解析完了';
   } catch (e) {
     status.textContent = 'エラー: ' + e.message;
@@ -131,6 +132,7 @@ analyzeBtn.addEventListener('click', async () => {
 function renderEvalChart(parsed) {
   const ctx = document.getElementById('eval-chart').getContext('2d');
   const moves = parsed.moves || [];
+  const usesBestFallback = moves.some(m => m.eval_source !== 'actual');
 
   const labels = moves.map(m => m.move);
   const values = moves.map(m => {
@@ -147,7 +149,7 @@ function renderEvalChart(parsed) {
     data: {
       labels,
       datasets: [{
-        label: '評価値',
+        label: usesBestFallback ? '評価値（一部AI最善候補）' : '評価値',
         data: values,
         borderColor: '#e94560',
         backgroundColor: 'rgba(233,69,96,0.1)',
@@ -180,32 +182,45 @@ function renderEvalChart(parsed) {
   });
 }
 
-function renderAnalysis(analysis) {
+function renderAnalysis(parsed, analysis) {
   document.getElementById('analysis-empty').style.display = 'none';
   const content = document.getElementById('analysis-content');
   content.style.display = 'block';
 
   let html = '<h2>局面のポイント</h2>';
+  const moves = parsed.moves || [];
+  if (moves.some(m => m.eval_source !== 'actual')) {
+    html += '<div class="summary-section"><p>一部の手は実際の指し手の評価値が棋譜に無いため、AI最善候補の評価値を代用しています。</p></div>';
+  }
 
   if (analysis.swing_points) {
     for (const sp of analysis.swing_points) {
       html += `<div class="swing-point">
-        <span class="tag">${sp.tag || ''}</span>
-        <div class="move-info">${sp.move}手目 ${sp.player === 'sente' ? '☗' : '☖'} ${sp.move_text}</div>
-        <div class="comment">${sp.short_comment || ''}</div>
+        <span class="tag">${escapeHtml(sp.tag || '')}</span>
+        <div class="move-info">${escapeHtml(String(sp.move))}手目 ${sp.player === 'sente' ? '☗' : '☖'} ${escapeHtml(sp.move_text || '')}</div>
+        <div class="comment">${escapeHtml(sp.short_comment || '')}</div>
       </div>`;
     }
   }
 
   if (analysis.summary) {
     html += '<div class="summary-section"><h3>対局の流れ</h3>';
-    if (analysis.summary.opening_to_middle) html += `<p><strong>序盤〜中盤:</strong> ${analysis.summary.opening_to_middle}</p>`;
-    if (analysis.summary.middle_to_endgame) html += `<p><strong>中盤〜終盤:</strong> ${analysis.summary.middle_to_endgame}</p>`;
-    if (analysis.summary.final_phase) html += `<p><strong>最終盤:</strong> ${analysis.summary.final_phase}</p>`;
+    if (analysis.summary.opening_to_middle) html += `<p><strong>序盤〜中盤:</strong> ${escapeHtml(analysis.summary.opening_to_middle)}</p>`;
+    if (analysis.summary.middle_to_endgame) html += `<p><strong>中盤〜終盤:</strong> ${escapeHtml(analysis.summary.middle_to_endgame)}</p>`;
+    if (analysis.summary.final_phase) html += `<p><strong>最終盤:</strong> ${escapeHtml(analysis.summary.final_phase)}</p>`;
     html += '</div>';
   }
 
   content.innerHTML = html;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 </script>
 </body>

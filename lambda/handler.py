@@ -1,8 +1,8 @@
 import json
 import os
 import tempfile
+from openai_responses import analyze_kifu
 from parse_kif import parse_kif
-from openai import OpenAI
 
 SYSTEM_PROMPT = open(os.path.join(os.path.dirname(__file__), "prompt.txt")).read()
 
@@ -37,21 +37,12 @@ def handler(event, context):
         parsed = parse_kif(tmp_path)
         os.unlink(tmp_path)
 
-        structured_input = json.dumps(parsed, ensure_ascii=False)
-
-        client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-        response = client.responses.create(
+        analysis = analyze_kifu(
+            parsed,
+            SYSTEM_PROMPT,
             model=os.environ.get("MODEL", "gpt-5.4-nano"),
-            instructions=SYSTEM_PROMPT,
-            input=structured_input,
-            temperature=0.3,
+            api_key=os.environ["OPENAI_API_KEY"],
         )
-
-        raw = response.output_text.strip()
-        if raw.startswith("```"):
-            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-
-        analysis = json.loads(raw)
 
         result = {
             "parsed": parsed,

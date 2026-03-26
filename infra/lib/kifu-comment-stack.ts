@@ -44,7 +44,8 @@ export class KifuCommentStack extends cdk.Stack {
       deployOptions: { stageName: "prod" },
     });
 
-    const analyze = api.root.addResource("analyze");
+    const apiResource = api.root.addResource("api");
+    const analyze = apiResource.addResource("analyze");
     analyze.addMethod("POST", new apigateway.LambdaIntegration(analyzerFn));
 
     // Frontend hosting
@@ -80,7 +81,7 @@ export class KifuCommentStack extends cdk.Stack {
 
     // Outputs
     new cdk.CfnOutput(this, "ApiEndpoint", {
-      value: `${api.url}analyze`,
+      value: `${api.url}api/analyze`,
     });
     new cdk.CfnOutput(this, "SiteUrl", {
       value: `https://${distribution.distributionDomainName}`,

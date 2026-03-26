@@ -89,17 +89,22 @@ def parse_kif(path: str) -> dict:
             continue
 
         best = next((a for a in mv["analyses"] if a["candidate"] == 1), mv["analyses"][0])
-        actual_is_best = any(a["is_best"] for a in mv["analyses"])
-        cp = eval_as_cp(best["eval"])
+        actual = next((a for a in mv["analyses"] if a["match_mark"]), None)
+        actual_is_best = actual["is_best"] if actual else False
+        eval_after = actual["eval"] if actual else best["eval"]
+        cp = eval_as_cp(eval_after)
 
         entry = {
             "move": mv["move"],
             "player": mv["player"],
             "move_text": mv["move_text"],
-            "eval_after": best["eval"],
+            "eval_after": eval_after,
+            "eval_source": "actual" if actual else "best",
+            "actual_eval": actual["eval"] if actual else None,
             "best_eval": best["eval"],
             "best_line": best["best_line"],
             "actual_is_best": actual_is_best,
+            "actual_move_in_candidates": actual is not None,
             "candidates": len(mv["analyses"]),
         }
 
