@@ -1024,7 +1024,7 @@ body.cosmo-active .layout {
 
 <script>
 const API_URL = '/api/analyze';
-const CHART_CP_LIMIT = 3000;
+const CHART_LIMIT_BUCKETS = [300, 500, 800, 1000, 1500, 2000, 3000, 5000, 8000, 10000, 15000, 20000, 30000];
 
 let kifText = null;
 let evalChart = null;
@@ -1146,9 +1146,10 @@ function renderEvalChart(parsed) {
   const ctx = document.getElementById('eval-chart').getContext('2d');
   const moves = parsed.moves || [];
   const usesBestFallback = moves.some((move) => move.eval_source !== 'actual');
+  const chartLimit = computeChartLimit(moves);
 
   const labels = moves.map((move) => move.move);
-  const values = moves.map((move) => evalToChartValue(move.eval_after));
+  const values = moves.map((move) => evalToChartValue(move.eval_after, chartLimit));
 
   if (evalChart) evalChart.destroy();
 
@@ -1204,11 +1205,11 @@ function renderEvalChart(parsed) {
           grid: { color: 'rgba(0, 0, 0, 0.12)' },
         },
         y: {
-          title: { display: true, text: '評価値', color: '#565656' },
+          title: { display: true, text: `評価値 (±${chartLimit}cp)`, color: '#565656' },
           ticks: { color: '#565656' },
           grid: { color: 'rgba(0, 0, 0, 0.12)' },
-          min: -CHART_CP_LIMIT,
-          max: CHART_CP_LIMIT,
+          min: -chartLimit,
+          max: chartLimit,
         },
       },
     },
@@ -1386,10 +1387,28 @@ function buildPointColors(moves) {
   });
 }
 
-function evalToChartValue(ev) {
+function computeChartLimit(moves) {
+  const firstMateIndex = moves.findIndex((move) => move.eval_after?.type === 'mate');
+  const referenceMoves = firstMateIndex > 0 ? moves.slice(0, firstMateIndex) : moves;
+  const cpValues = referenceMoves
+    .map((move) => move.eval_after)
+    .filter((ev) => ev?.type === 'cp')
+    .map((ev) => Math.abs(ev.value))
+    .filter((value) => Number.isFinite(value));
+
+  if (!cpValues.length) return 3000;
+
+  const rawLimit = Math.max(...cpValues);
+  for (const bucket of CHART_LIMIT_BUCKETS) {
+    if (rawLimit <= bucket) return bucket;
+  }
+  return Math.ceil(rawLimit / 5000) * 5000;
+}
+
+function evalToChartValue(ev, chartLimit) {
   if (!ev) return 0;
-  if (ev.type === 'cp') return Math.max(-CHART_CP_LIMIT, Math.min(CHART_CP_LIMIT, ev.value));
-  if (ev.type === 'mate') return ev.value > 0 ? CHART_CP_LIMIT : -CHART_CP_LIMIT;
+  if (ev.type === 'cp') return Math.max(-chartLimit, Math.min(chartLimit, ev.value));
+  if (ev.type === 'mate') return ev.value > 0 ? chartLimit : -chartLimit;
   return 0;
 }
 
