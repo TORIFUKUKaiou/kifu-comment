@@ -482,8 +482,10 @@ body.cosmo-active .layout {
 }
 
 .board-wrap {
-  min-height: 510px;
+  height: clamp(540px, 68vh, 720px);
   padding: 1rem;
+  overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .board-host {
@@ -492,8 +494,11 @@ body.cosmo-active .layout {
 
 .selected-move-card {
   margin-top: 0.85rem;
+  height: 340px;
   padding: 0.85rem;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255, 204, 0, 0.16));
+  overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .selected-title {
@@ -722,6 +727,7 @@ body.cosmo-active .layout {
 }
 
 .empty-inline {
+  display: block;
   color: var(--muted);
   font-weight: 600;
 }
@@ -1018,6 +1024,7 @@ body.cosmo-active .layout {
 
 <script>
 const API_URL = '/api/analyze';
+const CHART_CP_LIMIT = 3000;
 
 let kifText = null;
 let evalChart = null;
@@ -1200,8 +1207,8 @@ function renderEvalChart(parsed) {
           title: { display: true, text: '評価値', color: '#565656' },
           ticks: { color: '#565656' },
           grid: { color: 'rgba(0, 0, 0, 0.12)' },
-          suggestedMin: -3000,
-          suggestedMax: 3000,
+          min: -CHART_CP_LIMIT,
+          max: CHART_CP_LIMIT,
         },
       },
     },
@@ -1381,8 +1388,8 @@ function buildPointColors(moves) {
 
 function evalToChartValue(ev) {
   if (!ev) return 0;
-  if (ev.type === 'cp') return ev.value;
-  if (ev.type === 'mate') return ev.value > 0 ? 3000 : -3000;
+  if (ev.type === 'cp') return Math.max(-CHART_CP_LIMIT, Math.min(CHART_CP_LIMIT, ev.value));
+  if (ev.type === 'mate') return ev.value > 0 ? CHART_CP_LIMIT : -CHART_CP_LIMIT;
   return 0;
 }
 
