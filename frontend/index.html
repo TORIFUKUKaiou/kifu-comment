@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>棋譜解析 - 将棋の先生</title>
+<link rel="icon" href="data:,">
 <script src="https://cdn.jsdelivr.net/npm/kifu-for-js@5/bundle/kifu-for-js.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
@@ -90,13 +91,13 @@ fileInput.addEventListener('change', async (e) => {
   player.style.display = 'block';
   player.innerHTML = '';
 
-  const pre = document.createElement('script');
-  pre.className = 'kifu-for-js';
-  pre.textContent = kifText;
-  player.appendChild(pre);
-
   if (window.KifuForJS) {
-    KifuForJS.load(player);
+    try {
+      KifuForJS.load({ kifu: kifText }, 'kifu-player');
+    } catch (err) {
+      status.textContent = '棋譜表示エラー: ' + err.message;
+      console.error(err);
+    }
   }
 });
 
