@@ -5,73 +5,1045 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>棋譜解析 - 将棋の先生</title>
 <link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/kifu-for-js@5/bundle/kifu-for-js.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: "Hiragino Sans", "Yu Gothic", sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; }
-.header { padding: 16px 24px; background: #16213e; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 16px; }
-.header h1 { font-size: 1.2rem; }
-.upload-btn { padding: 8px 16px; background: #e94560; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
-.upload-btn:hover { background: #c73e54; }
-.upload-btn:disabled { background: #666; cursor: not-allowed; }
-#file-input { display: none; }
-.status { font-size: 0.85rem; color: #aaa; }
-.main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px; max-width: 1400px; margin: 0 auto; }
-.board-panel { background: #16213e; border-radius: 12px; padding: 16px; min-height: 500px; }
-.right-panel { display: flex; flex-direction: column; gap: 16px; }
-.chart-panel { background: #16213e; border-radius: 12px; padding: 16px; height: 280px; }
-.analysis-panel { background: #16213e; border-radius: 12px; padding: 16px; flex: 1; overflow-y: auto; }
-.analysis-panel h2 { font-size: 1rem; margin-bottom: 12px; color: #e94560; }
-.swing-point { background: #0f3460; border-radius: 8px; padding: 12px; margin-bottom: 8px; border-left: 3px solid #e94560; }
-.swing-point .tag { display: inline-block; background: #e94560; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-bottom: 4px; }
-.swing-point .move-info { font-size: 0.85rem; color: #aaa; margin-bottom: 4px; }
-.swing-point .comment { font-size: 0.9rem; line-height: 1.6; }
-.summary-section { margin-top: 16px; }
-.summary-section h3 { font-size: 0.9rem; color: #e94560; margin-bottom: 8px; }
-.summary-section p { font-size: 0.85rem; line-height: 1.7; color: #ccc; margin-bottom: 8px; }
-.empty-state { display: flex; align-items: center; justify-content: center; height: 100%; color: #666; font-size: 1.1rem; }
-@media (max-width: 960px) { .main { grid-template-columns: 1fr; } }
+:root {
+  --bg: #fff4d8;
+  --ink: #111111;
+  --panel: #fffef8;
+  --line: #161616;
+  --accent-hot: #ff4f20;
+  --accent-cold: #00c2ff;
+  --accent-lime: #57d957;
+  --accent-sun: #ffcc00;
+  --danger: #e81f43;
+  --muted: #565656;
+  --shadow-hard: 8px 8px 0 #151515;
+  --radius: 20px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: "Space Grotesk", sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 10% 20%, rgba(255, 79, 32, 0.25), transparent 35%),
+    radial-gradient(circle at 85% 10%, rgba(0, 194, 255, 0.2), transparent 30%),
+    radial-gradient(circle at 80% 85%, rgba(87, 217, 87, 0.2), transparent 30%),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.45),
+      rgba(255, 255, 255, 0.45) 18px,
+      rgba(255, 255, 255, 0.2) 18px,
+      rgba(255, 255, 255, 0.2) 36px
+    ),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+.shape {
+  position: fixed;
+  z-index: -1;
+  border: 3px solid var(--line);
+  opacity: 0.85;
+  animation: drift 12s ease-in-out infinite;
+}
+
+.shape-a {
+  width: 170px;
+  height: 170px;
+  border-radius: 24px;
+  background: linear-gradient(130deg, var(--accent-hot), var(--accent-sun));
+  top: 8%;
+  right: 8%;
+}
+
+.shape-b {
+  width: 190px;
+  height: 190px;
+  border-radius: 50%;
+  background: linear-gradient(120deg, var(--accent-cold), #0092ff);
+  left: 5%;
+  bottom: 16%;
+  animation-delay: -2s;
+}
+
+.shape-c {
+  width: 130px;
+  height: 130px;
+  border-radius: 22px;
+  background: linear-gradient(130deg, var(--accent-lime), #9bff47);
+  left: 20%;
+  top: 6%;
+  animation-delay: -4s;
+}
+
+.cosmo-stage {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+  opacity: 0;
+  transition: opacity 260ms ease;
+  overflow: hidden;
+}
+
+.cosmo-aurora {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      circle at var(--cosmo-x, 50vw) var(--cosmo-y, 34vh),
+      rgba(255, 255, 255, 0.85) 0%,
+      rgba(98, 221, 255, 0.62) 10%,
+      rgba(141, 114, 255, 0.35) 22%,
+      rgba(255, 81, 170, 0.18) 35%,
+      rgba(255, 81, 170, 0) 62%
+    ),
+    radial-gradient(
+      circle at calc(var(--cosmo-x, 50vw) + 8vw) calc(var(--cosmo-y, 34vh) - 4vh),
+      rgba(91, 255, 162, 0.35) 0%,
+      rgba(91, 255, 162, 0) 42%
+    );
+  filter: blur(1px);
+  transform: scale(0.92);
+}
+
+.cosmo-ring {
+  position: absolute;
+  left: var(--cosmo-x, 50vw);
+  top: var(--cosmo-y, 34vh);
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.68);
+  box-shadow:
+    0 0 28px rgba(87, 233, 255, 0.8),
+    inset 0 0 12px rgba(255, 255, 255, 0.85);
+  transform: translate(-50%, -50%) scale(0.24);
+  opacity: 0;
+}
+
+.cosmo-ring-a {
+  width: clamp(210px, 31vw, 420px);
+  height: clamp(210px, 31vw, 420px);
+}
+
+.cosmo-ring-b {
+  width: clamp(280px, 39vw, 540px);
+  height: clamp(280px, 39vw, 540px);
+  border-color: rgba(255, 204, 0, 0.72);
+}
+
+.cosmo-ring-c {
+  width: clamp(350px, 49vw, 660px);
+  height: clamp(350px, 49vw, 660px);
+  border-color: rgba(255, 97, 209, 0.62);
+}
+
+.cosmo-burst {
+  position: absolute;
+  left: var(--cosmo-x, 50vw);
+  top: var(--cosmo-y, 34vh);
+  width: clamp(260px, 40vw, 600px);
+  height: clamp(260px, 40vw, 600px);
+  transform: translate(-50%, -50%) scale(0.6);
+  border-radius: 50%;
+  opacity: 0;
+  background:
+    conic-gradient(
+      from 0deg,
+      rgba(255, 255, 255, 0) 0deg,
+      rgba(255, 255, 255, 0.98) 20deg,
+      rgba(255, 255, 255, 0) 40deg,
+      rgba(0, 194, 255, 0.95) 85deg,
+      rgba(255, 255, 255, 0) 110deg,
+      rgba(255, 204, 0, 0.95) 162deg,
+      rgba(255, 255, 255, 0) 196deg,
+      rgba(255, 79, 32, 0.95) 244deg,
+      rgba(255, 255, 255, 0) 274deg,
+      rgba(140, 93, 255, 0.95) 322deg,
+      rgba(255, 255, 255, 0) 360deg
+    );
+  mask-image: radial-gradient(circle, transparent 22%, #000 64%, transparent 72%);
+}
+
+.cosmo-stars {
+  position: absolute;
+  inset: 0;
+}
+
+.cosmo-star {
+  position: absolute;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow:
+    0 0 8px rgba(255, 255, 255, 0.95),
+    0 0 14px rgba(109, 214, 255, 0.85);
+  animation: cosmoStarFlight var(--dur, 900ms) cubic-bezier(0.18, 0.75, 0.32, 1.02) forwards;
+}
+
+body.cosmo-active .cosmo-stage {
+  opacity: 1;
+}
+
+body.cosmo-active .cosmo-aurora {
+  animation: cosmoBreath 1300ms ease-in-out infinite;
+}
+
+body.cosmo-active .cosmo-ring-a {
+  opacity: 0.95;
+  animation: cosmoRingExpand 980ms ease-out infinite;
+}
+
+body.cosmo-active .cosmo-ring-b {
+  opacity: 0.8;
+  animation: cosmoRingExpand 1180ms ease-out infinite 120ms;
+}
+
+body.cosmo-active .cosmo-ring-c {
+  opacity: 0.72;
+  animation: cosmoRingExpand 1460ms ease-out infinite 240ms;
+}
+
+body.cosmo-impact .cosmo-stage {
+  opacity: 1;
+}
+
+body.cosmo-impact .cosmo-burst {
+  animation: cosmoBurst 700ms cubic-bezier(0.14, 0.7, 0.2, 1.1) forwards;
+}
+
+body.cosmo-fizzle .cosmo-stage {
+  opacity: 0.45;
+}
+
+body.cosmo-active .hero,
+body.cosmo-active .layout {
+  filter: saturate(1.22) contrast(1.06);
+}
+
+.hero {
+  max-width: 1120px;
+  margin: 1.5rem auto 0;
+  padding: 1rem 1rem 0;
+}
+
+.hero-kicker {
+  display: inline-block;
+  margin: 0;
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  color: var(--panel);
+  background: linear-gradient(90deg, var(--accent-hot), #ff7c3d);
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  padding: 0.42rem 0.7rem;
+}
+
+.hero-title {
+  margin: 0.6rem 0 0;
+  font-family: "Anton", sans-serif;
+  font-size: clamp(2.8rem, 7vw, 5.4rem);
+  line-height: 0.95;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+
+.hero-copy {
+  margin: 0.85rem 0 0;
+  max-width: 60ch;
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  font-weight: 500;
+}
+
+.layout {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 1rem 1rem 3rem;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
+  grid-template-areas:
+    "control control"
+    "board analysis"
+    "chart analysis";
+}
+
+.panel {
+  background: linear-gradient(170deg, rgba(255, 255, 255, 0.95), rgba(255, 245, 229, 0.96));
+  border: 3px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-hard);
+  padding: 1rem;
+}
+
+.control-panel {
+  grid-area: control;
+}
+
+.board-panel {
+  grid-area: board;
+}
+
+.chart-panel {
+  grid-area: chart;
+}
+
+.analysis-panel {
+  grid-area: analysis;
+}
+
+.panel-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 1rem;
+}
+
+.panel-title {
+  margin: 0 0 0.8rem;
+  font-family: "Anton", sans-serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: clamp(1.3rem, 2vw, 1.8rem);
+}
+
+.panel-note {
+  margin: 0 0 0.8rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.btn {
+  appearance: none;
+  border: 3px solid var(--line);
+  border-radius: 12px;
+  cursor: pointer;
+  padding: 0.75rem 1rem;
+  font: inherit;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  transition: transform 140ms ease, box-shadow 140ms ease;
+  position: relative;
+  isolation: isolate;
+}
+
+.btn:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 4px 4px 0 var(--line);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.75;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-primary {
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent-hot), #ff7a2c);
+}
+
+.btn-primary::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 14px;
+  z-index: -1;
+  opacity: 0;
+  background:
+    conic-gradient(
+      from 0deg,
+      rgba(255, 255, 255, 0),
+      rgba(0, 194, 255, 0.95),
+      rgba(255, 204, 0, 0.92),
+      rgba(255, 79, 32, 0.95),
+      rgba(255, 255, 255, 0)
+    );
+}
+
+.btn-secondary {
+  color: var(--ink);
+  background: linear-gradient(135deg, #f4f4f4, #ffffff);
+}
+
+.btn-primary.cosmo-charging {
+  border-color: #ffffff;
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.84),
+    0 0 18px rgba(0, 194, 255, 0.9),
+    0 0 30px rgba(255, 204, 0, 0.78);
+  animation: cosmoButtonCharge 760ms ease-in-out infinite;
+}
+
+.btn-primary.cosmo-charging:disabled {
+  opacity: 1;
+}
+
+.btn-primary.cosmo-charging::after {
+  opacity: 1;
+  animation: cosmoHaloSpin 920ms linear infinite;
+}
+
+.btn-primary.cosmo-impact {
+  animation: cosmoImpactFlash 620ms ease-out;
+}
+
+#file-input {
+  display: none;
+}
+
+.status {
+  margin: 0.85rem 0 0;
+  border: 3px solid var(--line);
+  border-radius: 12px;
+  padding: 0.65rem 0.8rem;
+  font-weight: 600;
+}
+
+.status-info {
+  background: rgba(0, 194, 255, 0.2);
+}
+
+.status-success {
+  background: rgba(87, 217, 87, 0.2);
+}
+
+.status-error {
+  background: rgba(232, 31, 67, 0.18);
+}
+
+.metric-grid {
+  margin-top: 0.9rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.metric-card {
+  border: 3px solid var(--line);
+  border-radius: 14px;
+  padding: 0.7rem 0.85rem;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(0, 194, 255, 0.11));
+}
+
+.metric-card-main {
+  background: linear-gradient(135deg, rgba(255, 204, 0, 0.35), rgba(255, 79, 32, 0.3));
+}
+
+.metric-label {
+  margin: 0;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.metric-value {
+  margin: 0.45rem 0 0;
+  font-family: "Anton", sans-serif;
+  font-size: clamp(1.45rem, 3vw, 2.4rem);
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.board-wrap,
+.selected-move-card,
+.chart-wrap,
+.analysis-shell {
+  border: 3px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.board-wrap {
+  min-height: 510px;
+  padding: 1rem;
+}
+
+.board-host {
+  width: 100%;
+}
+
+.selected-move-card {
+  margin-top: 0.85rem;
+  padding: 0.85rem;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255, 204, 0, 0.16));
+}
+
+.selected-title {
+  margin: 0 0 0.55rem;
+  font-size: 0.92rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.selected-headline {
+  margin: 0;
+  font-family: "Anton", sans-serif;
+  font-size: 1.6rem;
+  line-height: 1.02;
+  letter-spacing: 0.03em;
+}
+
+.selected-note {
+  margin: 0.5rem 0 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.compare-grid {
+  margin-top: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.compare-card {
+  border: 3px solid var(--line);
+  border-radius: 14px;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.compare-card-actual {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(0, 194, 255, 0.12));
+}
+
+.compare-card-best {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(255, 79, 32, 0.15));
+}
+
+.compare-label {
+  margin: 0;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.compare-move {
+  margin: 0.35rem 0 0;
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.compare-meta {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: #2d2d2d;
+}
+
+.selected-line {
+  margin: 0.7rem 0 0;
+  padding-top: 0.7rem;
+  border-top: 2px dashed rgba(0, 0, 0, 0.2);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.selected-warning {
+  margin: 0.7rem 0 0;
+  padding: 0.6rem 0.7rem;
+  border: 2px dashed var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.65);
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.chart-wrap {
+  height: min(420px, 52vh);
+  padding: 0.8rem;
+}
+
+.analysis-shell {
+  margin-top: 0.2rem;
+  padding: 0.8rem;
+  min-height: 100%;
+}
+
+.analysis-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.swing-point {
+  width: 100%;
+  border: 3px solid var(--line);
+  border-radius: 16px;
+  padding: 0.85rem;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(255, 79, 32, 0.08));
+  text-align: left;
+}
+
+.swing-point-button {
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+.swing-point-button:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 4px 4px 0 var(--line);
+}
+
+.swing-point-selected {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(0, 194, 255, 0.16));
+  box-shadow: 0 0 0 3px rgba(0, 194, 255, 0.18);
+}
+
+.tag-row,
+.move-row,
+.compare-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: #121212;
+  color: #fff;
+  padding: 0.22rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.tag-eval {
+  background: linear-gradient(135deg, var(--accent-hot), #ff7a2c);
+}
+
+.tag-quality {
+  background: linear-gradient(135deg, var(--accent-cold), #0090d8);
+}
+
+.move-info {
+  margin-top: 0.6rem;
+  font-weight: 700;
+}
+
+.compare-chip-row {
+  margin-top: 0.65rem;
+}
+
+.compare-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  padding: 0.28rem 0.72rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.compare-chip-actual {
+  background: rgba(0, 194, 255, 0.14);
+}
+
+.compare-chip-best {
+  background: rgba(255, 79, 32, 0.14);
+}
+
+.compare-facts {
+  margin-top: 0.6rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.comment {
+  margin-top: 0.7rem;
+  font-size: 0.95rem;
+  line-height: 1.62;
+}
+
+.summary-section {
+  margin-top: 1rem;
+  border: 3px solid var(--line);
+  border-radius: 16px;
+  padding: 0.85rem;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(87, 217, 87, 0.1));
+}
+
+.summary-section h3 {
+  margin: 0 0 0.6rem;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.summary-section p {
+  margin: 0.5rem 0 0;
+  line-height: 1.6;
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  text-align: center;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.empty-inline {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.is-hidden {
+  display: none !important;
+}
+
+.reveal {
+  animation: riseIn 420ms cubic-bezier(0.17, 0.85, 0.32, 1.15) both;
+}
+
+@keyframes drift {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(0, -14px, 0) rotate(4deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+}
+
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes cosmoBreath {
+  0% {
+    opacity: 0.78;
+    transform: scale(0.88);
+    filter: blur(2px) saturate(1.1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.03);
+    filter: blur(0) saturate(1.35);
+  }
+  100% {
+    opacity: 0.82;
+    transform: scale(0.92);
+    filter: blur(1px) saturate(1.15);
+  }
+}
+
+@keyframes cosmoRingExpand {
+  0% {
+    transform: translate(-50%, -50%) scale(0.25);
+    opacity: 0.94;
+  }
+  70% {
+    opacity: 0.64;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.08);
+    opacity: 0;
+  }
+}
+
+@keyframes cosmoBurst {
+  0% {
+    opacity: 0.1;
+    transform: translate(-50%, -50%) scale(0.5) rotate(0deg);
+    filter: blur(2px);
+  }
+  40% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.4) rotate(78deg);
+    filter: blur(1px);
+  }
+}
+
+@keyframes cosmoStarFlight {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.25);
+  }
+  16% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--dx, 0px), var(--dy, -90px), 0) scale(1.18);
+  }
+}
+
+@keyframes cosmoButtonCharge {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(0, -1px) scale(1.02);
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+@keyframes cosmoHaloSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes cosmoImpactFlash {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  42% {
+    transform: scale(1.06);
+    filter: brightness(1.38);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+@media (max-width: 980px) {
+  .layout {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "control"
+      "board"
+      "chart"
+      "analysis";
+  }
+
+  .metric-grid,
+  .compare-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .panel-heading {
+    display: block;
+  }
+}
+
+@media (max-width: 640px) {
+  .hero {
+    margin-top: 1rem;
+  }
+
+  .shape {
+    opacity: 0.55;
+    transform: scale(0.8);
+  }
+
+  .button-row,
+  .metric-grid,
+  .compare-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .button-row {
+    display: grid;
+  }
+
+  .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .cosmo-ring-c {
+    display: none;
+  }
+
+  .cosmo-burst {
+    width: clamp(220px, 60vw, 320px);
+    height: clamp(220px, 60vw, 320px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shape,
+  .reveal,
+  .btn,
+  .btn-primary.cosmo-charging,
+  .btn-primary.cosmo-impact {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .cosmo-stage {
+    display: none;
+  }
+}
 </style>
 </head>
 <body>
 
-<div class="header">
-  <h1>🔥 棋譜解析 — 将棋の先生</h1>
-  <label class="upload-btn" id="upload-label">
-    <span id="upload-label-text">.kifファイルを選択</span>
-    <input type="file" id="file-input" accept=".kif">
-  </label>
-  <button class="upload-btn" id="analyze-btn" disabled>解析する</button>
-  <span class="status" id="status"></span>
+<div class="shape shape-a"></div>
+<div class="shape shape-b"></div>
+<div class="shape shape-c"></div>
+
+<div class="cosmo-stage" aria-hidden="true">
+  <div class="cosmo-aurora"></div>
+  <div class="cosmo-ring cosmo-ring-a"></div>
+  <div class="cosmo-ring cosmo-ring-b"></div>
+  <div class="cosmo-ring cosmo-ring-c"></div>
+  <div class="cosmo-burst"></div>
+  <div class="cosmo-stars" id="cosmo-stars"></div>
 </div>
 
-<div class="main">
-  <div class="board-panel" id="board-panel">
-    <div class="empty-state" id="board-empty">棋譜ファイルを読み込んでください</div>
-    <div id="kifu-player" style="display:none;"></div>
-  </div>
-  <div class="right-panel">
-    <div class="chart-panel">
+<header class="hero reveal">
+  <p class="hero-kicker">SHOGI COSMO ANALYZER</p>
+  <h1 class="hero-title">棋譜とAI推奨を<br>同じ盤面で追う</h1>
+  <p class="hero-copy">評価グラフ、局面コメント、実戦手とAI推奨手の比較をつなげて、気になった局面へ即ジャンプできるようにしました。</p>
+</header>
+
+<main class="layout">
+  <section class="panel control-panel reveal">
+    <h2 class="panel-title">Control Deck</h2>
+    <div class="button-row">
+      <label class="btn btn-secondary" id="upload-label">
+        <span id="upload-label-text">.kifファイルを選択</span>
+        <input type="file" id="file-input" accept=".kif">
+      </label>
+      <button class="btn btn-primary" id="analyze-btn" disabled>コスモ解析</button>
+    </div>
+    <div class="status status-info" id="status">棋譜を読み込むと、盤面だけ先に表示できます。</div>
+    <div class="metric-grid">
+      <div class="metric-card">
+        <p class="metric-label">先手</p>
+        <p class="metric-value" id="meta-sente">-</p>
+      </div>
+      <div class="metric-card">
+        <p class="metric-label">後手</p>
+        <p class="metric-value" id="meta-gote">-</p>
+      </div>
+      <div class="metric-card metric-card-main">
+        <p class="metric-label">総手数</p>
+        <p class="metric-value" id="meta-total">-</p>
+      </div>
+      <div class="metric-card">
+        <p class="metric-label">選択局面</p>
+        <p class="metric-value" id="meta-selected">初期局面</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel board-panel reveal" id="board-panel">
+    <div class="panel-heading">
+      <h2 class="panel-title">Board Jump</h2>
+      <p class="panel-note">グラフとコメントカードのクリックで、この盤面をその手へジャンプさせます。</p>
+    </div>
+    <div class="board-wrap">
+      <div class="empty-state" id="board-empty">棋譜ファイルを読み込んでください</div>
+      <div id="kifu-player" class="board-host is-hidden"></div>
+    </div>
+    <div class="selected-move-card">
+      <div id="selected-move-empty" class="empty-inline">解析後に局面を選ぶと、実戦とAI推奨の比較をここに表示します。</div>
+      <div id="selected-move-content" class="is-hidden"></div>
+    </div>
+  </section>
+
+  <section class="panel chart-panel reveal">
+    <div class="panel-heading">
+      <h2 class="panel-title">Eval Wave</h2>
+      <p class="panel-note">点をクリックすると、その手数の局面へ移動します。</p>
+    </div>
+    <div class="chart-wrap">
       <canvas id="eval-chart"></canvas>
     </div>
-    <div class="analysis-panel" id="analysis-panel">
-      <div class="empty-state" id="analysis-empty">解析結果がここに表示されます</div>
-      <div id="analysis-content" style="display:none;"></div>
+  </section>
+
+  <section class="panel analysis-panel reveal">
+    <div class="panel-heading">
+      <h2 class="panel-title">局面コメント</h2>
+      <p class="panel-note">コメント本文に加えて、実戦手とAI推奨手を並べて表示します。</p>
     </div>
-  </div>
-</div>
+    <div class="analysis-shell">
+      <div class="empty-state" id="analysis-empty">解析結果がここに表示されます</div>
+      <div id="analysis-content" class="is-hidden"></div>
+    </div>
+  </section>
+</main>
 
 <script>
 const API_URL = '/api/analyze';
 
 let kifText = null;
 let evalChart = null;
+let currentParsed = null;
+let currentAnalysis = null;
+let selectedMove = 0;
+let cosmoStarInterval = null;
+let cosmoStopTimer = null;
+let cosmoCleanupTimer = null;
 
 const fileInput = document.getElementById('file-input');
 const analyzeBtn = document.getElementById('analyze-btn');
 const status = document.getElementById('status');
 const uploadLabelText = document.getElementById('upload-label-text');
+const boardEmpty = document.getElementById('board-empty');
+const boardHost = document.getElementById('kifu-player');
+const analysisEmpty = document.getElementById('analysis-empty');
+const analysisContent = document.getElementById('analysis-content');
+const selectedMoveEmpty = document.getElementById('selected-move-empty');
+const selectedMoveContent = document.getElementById('selected-move-content');
+const cosmoStars = document.getElementById('cosmo-stars');
+
+const metaSente = document.getElementById('meta-sente');
+const metaGote = document.getElementById('meta-gote');
+const metaTotal = document.getElementById('meta-total');
+const metaSelected = document.getElementById('meta-selected');
 
 fileInput.addEventListener('change', async (e) => {
   const file = e.target.files[0];
@@ -83,29 +1055,22 @@ fileInput.addEventListener('change', async (e) => {
 
   uploadLabelText.textContent = file.name;
   analyzeBtn.disabled = false;
-  status.textContent = '読み込み完了';
+  setStatus('棋譜を読み込みました。盤面は先に確認でき、解析はあとから実行できます。', 'info');
 
-  // Show board
-  document.getElementById('board-empty').style.display = 'none';
-  const player = document.getElementById('kifu-player');
-  player.style.display = 'block';
-  player.innerHTML = '';
-
-  if (window.KifuForJS) {
-    try {
-      KifuForJS.load({ kifu: kifText }, 'kifu-player');
-    } catch (err) {
-      status.textContent = '棋譜表示エラー: ' + err.message;
-      console.error(err);
-    }
-  }
+  currentParsed = null;
+  currentAnalysis = null;
+  selectedMove = 0;
+  resetAnalysisUI();
+  updateMeta(null);
+  renderBoard(0);
 });
 
 analyzeBtn.addEventListener('click', async () => {
   if (!kifText) return;
 
   analyzeBtn.disabled = true;
-  status.textContent = '解析中...';
+  startCosmo();
+  setStatus('解析中... 小宇宙を燃やしています。', 'info');
 
   try {
     const res = await fetch(API_URL, {
@@ -116,32 +1081,60 @@ analyzeBtn.addEventListener('click', async () => {
     const data = await res.json();
 
     if (data.error) {
-      status.textContent = 'エラー: ' + data.error;
+      stopCosmo('error');
+      setStatus(`エラー: ${data.error}`, 'error');
       analyzeBtn.disabled = false;
       return;
     }
 
-    renderEvalChart(data.parsed);
-    renderAnalysis(data.parsed, data.analysis);
-    status.textContent = '解析完了';
+    currentParsed = data.parsed;
+    currentAnalysis = data.analysis;
+    updateMeta(currentParsed);
+    renderEvalChart(currentParsed);
+    renderAnalysis(currentParsed, currentAnalysis);
+
+    const firstFocusMove = currentAnalysis.swing_points?.[0]?.move || currentParsed.moves?.[0]?.move || 0;
+    jumpToMove(firstFocusMove, { revealBoard: false });
+
+    stopCosmo('success');
+    setStatus('解析完了。グラフやコメントをクリックすると対応局面へジャンプできます。', 'success');
   } catch (e) {
-    status.textContent = 'エラー: ' + e.message;
+    stopCosmo('error');
+    setStatus(`エラー: ${e.message}`, 'error');
   }
+
   analyzeBtn.disabled = false;
 });
+
+function renderBoard(ply) {
+  if (!kifText || !window.KifuForJS) return;
+
+  boardEmpty.classList.add('is-hidden');
+  boardHost.classList.remove('is-hidden');
+  boardHost.innerHTML = '';
+
+  try {
+    KifuForJS.load(
+      {
+        kifu: kifText,
+        ply,
+        maxWidth: null,
+      },
+      'kifu-player',
+    );
+  } catch (err) {
+    setStatus(`棋譜表示エラー: ${err.message}`, 'error');
+    console.error(err);
+  }
+}
 
 function renderEvalChart(parsed) {
   const ctx = document.getElementById('eval-chart').getContext('2d');
   const moves = parsed.moves || [];
-  const usesBestFallback = moves.some(m => m.eval_source !== 'actual');
+  const usesBestFallback = moves.some((move) => move.eval_source !== 'actual');
 
-  const labels = moves.map(m => m.move);
-  const values = moves.map(m => {
-    const ev = m.eval_after;
-    if (ev.type === 'cp') return ev.value;
-    if (ev.type === 'mate') return ev.value > 0 ? 3000 : -3000;
-    return 0;
-  });
+  const labels = moves.map((move) => move.move);
+  const values = moves.map((move) => evalToChartValue(move.eval_after));
 
   if (evalChart) evalChart.destroy();
 
@@ -150,59 +1143,98 @@ function renderEvalChart(parsed) {
     data: {
       labels,
       datasets: [{
-        label: usesBestFallback ? '評価値（一部AI最善候補）' : '評価値',
+        label: usesBestFallback ? '評価値（一部AI最善候補を代用）' : '評価値',
         data: values,
-        borderColor: '#e94560',
-        backgroundColor: 'rgba(233,69,96,0.1)',
+        borderColor: '#ff4f20',
+        backgroundColor: 'rgba(255, 79, 32, 0.13)',
         fill: true,
-        tension: 0.3,
-        pointRadius: 2,
-      }]
+        tension: 0.28,
+        pointRadius: buildPointRadius(moves),
+        pointHoverRadius: buildPointHoverRadius(moves),
+        pointBackgroundColor: buildPointColors(moves),
+        pointBorderColor: '#161616',
+        pointBorderWidth: 2,
+      }],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      onClick: (_, elements) => {
+        if (!elements.length) return;
+        const index = elements[0].index;
+        const move = moves[index];
+        if (move) jumpToMove(move.move);
+      },
       plugins: {
         legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label(context) {
+              const move = moves[context.dataIndex];
+              return formatChartTooltip(move);
+            },
+            afterLabel(context) {
+              const move = moves[context.dataIndex];
+              return move ? [
+                `実戦: ${playerSymbol(move.player)}${move.move_text}`,
+                `AI推奨: ${playerSymbol(move.player)}${move.best_move_text}`,
+              ] : [];
+            },
+          },
+        },
       },
       scales: {
         x: {
-          title: { display: true, text: '手数', color: '#aaa' },
-          ticks: { color: '#aaa' },
-          grid: { color: '#333' },
+          title: { display: true, text: '手数', color: '#565656' },
+          ticks: { color: '#565656' },
+          grid: { color: 'rgba(0, 0, 0, 0.12)' },
         },
         y: {
-          title: { display: true, text: '評価値', color: '#aaa' },
-          ticks: { color: '#aaa' },
-          grid: { color: '#333' },
+          title: { display: true, text: '評価値', color: '#565656' },
+          ticks: { color: '#565656' },
+          grid: { color: 'rgba(0, 0, 0, 0.12)' },
           suggestedMin: -3000,
           suggestedMax: 3000,
-        }
-      }
-    }
+        },
+      },
+    },
   });
 }
 
 function renderAnalysis(parsed, analysis) {
-  document.getElementById('analysis-empty').style.display = 'none';
-  const content = document.getElementById('analysis-content');
-  content.style.display = 'block';
-
-  let html = '<h2>局面のポイント</h2>';
   const moves = parsed.moves || [];
-  if (moves.some(m => m.eval_source !== 'actual')) {
-    html += '<div class="summary-section"><p>一部の手は実際の指し手の評価値が棋譜に無いため、AI最善候補の評価値を代用しています。</p></div>';
+  const moveMap = new Map(moves.map((move) => [move.move, move]));
+  const swingPoints = analysis.swing_points || [];
+
+  analysisEmpty.classList.add('is-hidden');
+  analysisContent.classList.remove('is-hidden');
+
+  let html = '<div class="analysis-list">';
+  if (moves.some((move) => move.eval_source !== 'actual')) {
+    html += '<div class="summary-section"><h3>評価値の読み方</h3><p>一部の手では実戦手の評価値が候補一覧に無いため、グラフと差分表示にはAI最善候補の評価値を代用しています。</p></div>';
   }
 
-  if (analysis.swing_points) {
-    for (const sp of analysis.swing_points) {
-      html += `<div class="swing-point">
-        <span class="tag">${escapeHtml(sp.tag || '')}</span>
-        <div class="move-info">${escapeHtml(String(sp.move))}手目 ${sp.player === 'sente' ? '☗' : '☖'} ${escapeHtml(sp.move_text || '')}</div>
-        <div class="comment">${escapeHtml(sp.short_comment || '')}</div>
-      </div>`;
-    }
+  for (const swingPoint of swingPoints) {
+    const move = moveMap.get(swingPoint.move);
+    if (!move) continue;
+
+    html += `<button class="swing-point swing-point-button${move.move === selectedMove ? ' swing-point-selected' : ''}" data-move="${move.move}">
+      <div class="tag-row">
+        <span class="tag">${escapeHtml(swingPoint.tag || '局面ポイント')}</span>
+        <span class="tag tag-eval">${escapeHtml(formatEvalTag(move))}</span>
+        ${move.quality_mark ? `<span class="tag tag-quality">注記 ${escapeHtml(move.quality_mark)}</span>` : ''}
+      </div>
+      <div class="move-info">${escapeHtml(`${move.move}手目 ${playerSymbol(move.player)} ${move.move_text}`)}</div>
+      <div class="compare-chip-row">
+        <span class="compare-chip compare-chip-actual">実戦 ${escapeHtml(playerSymbol(move.player) + move.move_text)}</span>
+        <span class="compare-chip compare-chip-best">AI推奨 ${escapeHtml(playerSymbol(move.player) + move.best_move_text)}</span>
+      </div>
+      <div class="compare-facts">${escapeHtml(formatComparisonFacts(move))}</div>
+      <div class="comment">${escapeHtml(swingPoint.short_comment || '')}</div>
+    </button>`;
   }
+
+  html += '</div>';
 
   if (analysis.summary) {
     html += '<div class="summary-section"><h3>対局の流れ</h3>';
@@ -212,7 +1244,276 @@ function renderAnalysis(parsed, analysis) {
     html += '</div>';
   }
 
-  content.innerHTML = html;
+  analysisContent.innerHTML = html;
+  analysisContent.querySelectorAll('[data-move]').forEach((button) => {
+    button.addEventListener('click', () => {
+      jumpToMove(Number(button.dataset.move));
+    });
+  });
+}
+
+function jumpToMove(move, { revealBoard = true } = {}) {
+  const numericMove = Number(move) || 0;
+  selectedMove = numericMove;
+  renderBoard(selectedMove);
+  applyChartSelection();
+  applyAnalysisSelection();
+  renderSelectedMoveCard();
+  updateMeta(currentParsed);
+
+  if (revealBoard && window.innerWidth < 980) {
+    document.getElementById('board-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function renderSelectedMoveCard() {
+  const move = getSelectedMove();
+  if (!move) {
+    selectedMoveEmpty.classList.remove('is-hidden');
+    selectedMoveContent.classList.add('is-hidden');
+    selectedMoveContent.innerHTML = '';
+    return;
+  }
+
+  const comment = currentAnalysis?.swing_points?.find((item) => item.move === move.move);
+  selectedMoveEmpty.classList.add('is-hidden');
+  selectedMoveContent.classList.remove('is-hidden');
+  selectedMoveContent.innerHTML = `
+    <h3 class="selected-title">Selected Position</h3>
+    <p class="selected-headline">${escapeHtml(`${move.move}手目 ${playerSymbol(move.player)} ${move.move_text}`)}</p>
+    <p class="selected-note">${escapeHtml(comment?.short_comment || 'この局面の実戦手とAI推奨手の比較です。')}</p>
+    <div class="compare-grid">
+      <div class="compare-card compare-card-actual">
+        <p class="compare-label">実戦</p>
+        <p class="compare-move">${escapeHtml(playerSymbol(move.player) + move.move_text)}</p>
+        <p class="compare-meta">${escapeHtml(formatActualMeta(move))}</p>
+      </div>
+      <div class="compare-card compare-card-best">
+        <p class="compare-label">AI推奨</p>
+        <p class="compare-move">${escapeHtml(playerSymbol(move.player) + move.best_move_text)}</p>
+        <p class="compare-meta">${escapeHtml(`評価 ${formatEval(move.best_eval)} / 読み筋先頭 ${playerSymbol(move.player)}${move.best_move_text}`)}</p>
+      </div>
+    </div>
+    <p class="selected-line"><strong>AI想定手順:</strong> ${escapeHtml(move.best_line)}</p>
+    ${move.eval_source === 'best' ? '<p class="selected-warning">この局面は実戦手の評価値が候補一覧に無く、グラフ上ではAI最善候補の評価値を代用しています。</p>' : ''}
+  `;
+}
+
+function getSelectedMove() {
+  if (!currentParsed || !selectedMove) return null;
+  return currentParsed.moves.find((move) => move.move === selectedMove) || null;
+}
+
+function applyChartSelection() {
+  if (!evalChart || !currentParsed) return;
+  const moves = currentParsed.moves || [];
+  const dataset = evalChart.data.datasets[0];
+  dataset.pointRadius = buildPointRadius(moves);
+  dataset.pointHoverRadius = buildPointHoverRadius(moves);
+  dataset.pointBackgroundColor = buildPointColors(moves);
+  evalChart.update('none');
+}
+
+function applyAnalysisSelection() {
+  analysisContent.querySelectorAll('[data-move]').forEach((button) => {
+    const move = Number(button.dataset.move);
+    button.classList.toggle('swing-point-selected', move === selectedMove);
+  });
+}
+
+function resetAnalysisUI() {
+  currentParsed = null;
+  currentAnalysis = null;
+  analysisEmpty.classList.remove('is-hidden');
+  analysisContent.classList.add('is-hidden');
+  analysisContent.innerHTML = '';
+  selectedMoveEmpty.classList.remove('is-hidden');
+  selectedMoveContent.classList.add('is-hidden');
+  selectedMoveContent.innerHTML = '';
+  if (evalChart) {
+    evalChart.destroy();
+    evalChart = null;
+  }
+}
+
+function buildPointRadius(moves) {
+  return moves.map((move) => move.move === selectedMove ? 6 : 3);
+}
+
+function buildPointHoverRadius(moves) {
+  return moves.map((move) => move.move === selectedMove ? 8 : 5);
+}
+
+function buildPointColors(moves) {
+  return moves.map((move) => {
+    if (move.move === selectedMove) return '#00c2ff';
+    return move.eval_source === 'actual' ? '#ffcc00' : '#ffffff';
+  });
+}
+
+function evalToChartValue(ev) {
+  if (!ev) return 0;
+  if (ev.type === 'cp') return ev.value;
+  if (ev.type === 'mate') return ev.value > 0 ? 3000 : -3000;
+  return 0;
+}
+
+function formatEval(ev) {
+  if (!ev) return '不明';
+  if (ev.type === 'cp') return `${ev.value > 0 ? '+' : ''}${ev.value}cp`;
+  if (ev.type === 'mate') return `${ev.value > 0 ? '+' : '-'}詰${Math.abs(ev.value)}`;
+  return String(ev.value || '不明');
+}
+
+function formatEvalTag(move) {
+  if (move.actual_is_best) return '実戦=AI最善';
+  if (move.actual_move_in_candidates) return `候補${move.actual_candidate_rank}`;
+  return '候補外';
+}
+
+function formatLoss(loss) {
+  if (loss == null) return '不明';
+  if (Math.abs(loss) >= 90000) return '詰み級';
+  if (loss === 0) return '0cp';
+  return `${loss}cp`;
+}
+
+function formatChartTooltip(move) {
+  if (!move) return '';
+  const sourceLabel = move.eval_source === 'actual' ? '実戦評価' : 'AI候補評価';
+  return `${sourceLabel}: ${formatEval(move.eval_after)}`;
+}
+
+function formatComparisonFacts(move) {
+  const parts = [];
+  if (move.actual_is_best) {
+    parts.push('実戦手はAI候補1位でした。');
+  } else if (move.actual_move_in_candidates) {
+    parts.push(`実戦手は候補${move.actual_candidate_rank}位でした。`);
+  } else {
+    parts.push('実戦手は候補一覧に出ていません。');
+  }
+
+  if (move.actual_move_in_candidates) {
+    parts.push(`最善との差は ${formatLoss(move.eval_loss)} です。`);
+  } else {
+    parts.push('厳密な評価差は取れていません。');
+  }
+
+  if (move.eval_source === 'best') {
+    parts.push('グラフ値はAI最善候補を代用しています。');
+  }
+
+  return parts.join(' ');
+}
+
+function formatActualMeta(move) {
+  if (move.actual_is_best) {
+    return `候補1位 / 評価 ${formatEval(move.actual_eval)}`;
+  }
+  if (move.actual_move_in_candidates) {
+    return `候補${move.actual_candidate_rank}位 / 評価 ${formatEval(move.actual_eval)} / 最善との差 ${formatLoss(move.eval_loss)}`;
+  }
+  return '候補一覧外。厳密な評価値は取れていません。';
+}
+
+function playerSymbol(player) {
+  return player === 'gote' ? '☖' : '☗';
+}
+
+function updateMeta(parsed) {
+  if (!parsed) {
+    metaSente.textContent = '-';
+    metaGote.textContent = '-';
+    metaTotal.textContent = '-';
+    metaSelected.textContent = selectedMove ? `${selectedMove}手目` : '初期局面';
+    return;
+  }
+
+  const header = parsed.header || {};
+  metaSente.textContent = header['先手'] || '-';
+  metaGote.textContent = header['後手'] || '-';
+  metaTotal.textContent = String(parsed.total_moves || parsed.moves?.length || '-');
+  metaSelected.textContent = selectedMove ? `${selectedMove}手目` : '初期局面';
+}
+
+function setStatus(message, type = 'info') {
+  status.textContent = message;
+  status.classList.remove('status-info', 'status-success', 'status-error');
+  status.classList.add(`status-${type}`);
+}
+
+function startCosmo() {
+  clearTimeout(cosmoStopTimer);
+  clearTimeout(cosmoCleanupTimer);
+  clearInterval(cosmoStarInterval);
+
+  const rect = analyzeBtn.getBoundingClientRect();
+  document.documentElement.style.setProperty('--cosmo-x', `${rect.left + rect.width / 2}px`);
+  document.documentElement.style.setProperty('--cosmo-y', `${rect.top + rect.height / 2}px`);
+
+  document.body.classList.remove('cosmo-impact', 'cosmo-fizzle');
+  document.body.classList.add('cosmo-active');
+  analyzeBtn.classList.remove('cosmo-impact');
+  analyzeBtn.classList.add('cosmo-charging');
+
+  spawnCosmoStars(34);
+  cosmoStarInterval = setInterval(() => {
+    spawnCosmoStars(18);
+  }, 260);
+}
+
+function stopCosmo(mode) {
+  clearInterval(cosmoStarInterval);
+  cosmoStarInterval = null;
+  analyzeBtn.classList.remove('cosmo-charging');
+
+  if (mode === 'success') {
+    document.body.classList.add('cosmo-impact');
+    analyzeBtn.classList.add('cosmo-impact');
+  } else {
+    document.body.classList.add('cosmo-fizzle');
+  }
+
+  cosmoStopTimer = setTimeout(() => {
+    document.body.classList.remove('cosmo-active');
+  }, 240);
+
+  cosmoCleanupTimer = setTimeout(() => {
+    document.body.classList.remove('cosmo-impact', 'cosmo-fizzle');
+    analyzeBtn.classList.remove('cosmo-impact');
+    cosmoStars.innerHTML = '';
+  }, 920);
+}
+
+function spawnCosmoStars(count) {
+  const sourceRect = analyzeBtn.getBoundingClientRect();
+  const startX = sourceRect.left + sourceRect.width / 2;
+  const startY = sourceRect.top + sourceRect.height / 2;
+
+  for (let index = 0; index < count; index += 1) {
+    const star = document.createElement('span');
+    const size = 2 + Math.random() * 6;
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 90 + Math.random() * 420;
+    const driftX = Math.cos(angle) * distance;
+    const driftY = Math.sin(angle) * distance;
+    const duration = 620 + Math.random() * 760;
+
+    star.className = 'cosmo-star';
+    star.style.left = `${startX}px`;
+    star.style.top = `${startY}px`;
+    star.style.width = `${size}px`;
+    star.style.height = `${size}px`;
+    star.style.setProperty('--dx', `${driftX}px`);
+    star.style.setProperty('--dy', `${driftY}px`);
+    star.style.setProperty('--dur', `${duration}ms`);
+    cosmoStars.appendChild(star);
+
+    setTimeout(() => {
+      star.remove();
+    }, duration + 50);
+  }
 }
 
 function escapeHtml(value) {

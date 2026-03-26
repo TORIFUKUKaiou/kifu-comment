@@ -25,14 +25,32 @@ def eval_as_cp(ev):
     return 0
 
 
+def extract_first_move(best_line: str) -> str:
+    return best_line.split(" ", 1)[0].strip()
+
+
+def strip_player_prefix(move_text: str) -> str:
+    if move_text[:1] in ("▲", "△", "☗", "☖"):
+        return move_text[1:]
+    return move_text
+
+
+def eval_loss_for_player(player: str, best_eval: dict, actual_eval: dict):
+    best_cp = eval_as_cp(best_eval)
+    actual_cp = eval_as_cp(actual_eval)
+    if player == "gote":
+        best_cp = -best_cp
+        actual_cp = -actual_cp
+    return best_cp - actual_cp
+
+
 def parse_kif(path: str) -> dict:
     with open(path, "r", encoding="cp932") as f:
         lines = f.readlines()
 
     header = {}
     moves = []
-    current_move = None
-    analyses = []
+    pending_analyses = []
 
     for raw_line in lines:
         line = raw_line.rstrip("\r\n")
@@ -44,18 +62,16 @@ def parse_kif(path: str) -> dict:
 
         m = re.match(r"^\s+(\d+)\s+(.+?)\s+\(", line)
         if m:
-            if current_move is not None:
-                current_move["analyses"] = analyses
-                moves.append(current_move)
             move_num = int(m.group(1))
             move_text = m.group(2).strip()
             player = "sente" if move_num % 2 == 1 else "gote"
-            current_move = {
+            moves.append({
                 "move": move_num,
                 "player": player,
                 "move_text": move_text,
-            }
-            analyses = []
+                "analyses": pending_analyses,
+            })
+            pending_analyses = []
             continue
 
         m = re.match(
@@ -68,18 +84,15 @@ def parse_kif(path: str) -> dict:
             ev = parse_eval(m.group(3))
             best_line = m.group(4).strip()
 
-            analyses.append({
+            pending_analyses.append({
                 "candidate": candidate,
                 "is_best": match_mark == "○",
                 "match_mark": match_mark,
                 "eval": ev,
                 "best_line": best_line,
+                "move_text": strip_player_prefix(extract_first_move(best_line)),
             })
             continue
-
-    if current_move is not None:
-        current_move["analyses"] = analyses
-        moves.append(current_move)
 
     # Build structured output
     result = []
@@ -89,10 +102,12 @@ def parse_kif(path: str) -> dict:
             continue
 
         best = next((a for a in mv["analyses"] if a["candidate"] == 1), mv["analyses"][0])
-        actual = next((a for a in mv["analyses"] if a["match_mark"]), None)
-        actual_is_best = actual["is_best"] if actual else False
+        actual = next((a for a in mv["analyses"] if a["move_text"] == mv["move_text"]), None)
+        quality_mark = next((a["match_mark"] for a in mv["analyses"] if a["match_mark"]), "")
+        actual_is_best = actual is not None and actual["candidate"] == 1
         eval_after = actual["eval"] if actual else best["eval"]
         cp = eval_as_cp(eval_after)
+        eval_loss = eval_loss_for_player(mv["player"], best["eval"], actual["eval"]) if actual else None
 
         entry = {
             "move": mv["move"],
@@ -102,9 +117,13 @@ def parse_kif(path: str) -> dict:
             "eval_source": "actual" if actual else "best",
             "actual_eval": actual["eval"] if actual else None,
             "best_eval": best["eval"],
+            "eval_loss": eval_loss,
+            "quality_mark": quality_mark,
+            "best_move_text": best["move_text"],
             "best_line": best["best_line"],
             "actual_is_best": actual_is_best,
             "actual_move_in_candidates": actual is not None,
+            "actual_candidate_rank": actual["candidate"] if actual else None,
             "candidates": len(mv["analyses"]),
         }
 
